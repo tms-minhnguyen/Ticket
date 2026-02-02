@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # ===============================
+  # MySQL Database (Performance Tuned)
+  # ===============================
+  mysql:
+    image: mysql:8.0
+    container_name: ticket-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ticket_db
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./docker/mysql/stress.cnf:/etc/mysql/conf.d/stress.cnf:ro
+    # Aggressive tuning via command flags as well
+    command: >
+      --default-authentication-plugin=mysql_native_password --innodb_flush_log_at_trx_commit=0  --sync_binlog=0 --innodb_buffer_pool_size=1G  --max_connections=1000
+    restart: always
+    networks:
+      - stress-net
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ===============================
+  # Redis Cache (Performance Tuned)
+  # ===============================
+  redis:
+    image: redis:7.0-alpine
+    container_name: ticket-redis
+    # Disable persistence for max speed, use allkeys-lru
+    command: redis-server --appendonly no --save "" --maxmemory 512mb --maxmemory-policy allkeys-lru
+    restart: always
+    networks:
+      - stress-net
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ===============================
+  # Backend (Spring Boot)
+  # ===============================
+  backend:
+    build:
+      context: ./ticket
+      dockerfile: Dockerfile
+    container_name: ticket-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/ticket_db?useSSL=false
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      # Disable SQS for simple stress test or use empty to mock
+      AWS_SQS_ENDPOINT: http://localstack:4566
+      JAVA_OPTS: "-Xmx2G -Xms1G -XX:+UseG1GC -XX:MaxGCPauseMillis=100"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: always
+    networks:
+      - stress-net
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8081/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ===============================
+  # LocalStack (Mock SQS) - optional for payment flow
+  # ===============================
+  localstack:
+    image: localstack/localstack:latest
+    container_name: ticket-localstack
+    environment:
+      - SERVICES=sqs
+      - DEFAULT_REGION=ap-southeast-1
+    networks:
+      - stress-net
+
+volumes:
+  mysql_data:
+    driver: local
+
+networks:
+  stress-net:
+    driver: bridge
