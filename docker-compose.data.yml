@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  # ===============================
+  # MySQL Database (Data Node)
+  # ===============================
+  mysql:
+    image: mysql:8.0
+    container_name: ticket-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ticket_db
+    ports:
+      - "3306:3306" # Expose for App Nodes
+    volumes:
+      - mysql_data:/var/lib/mysql
+      # Adjusted path: now in ticket/, so go up one level to docker/
+      - ../docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ../docker/mysql/stress.cnf:/etc/mysql/conf.d/stress.cnf:ro
+    command: >
+      --default-authentication-plugin=mysql_native_password --innodb_flush_log_at_trx_commit=0  --sync_binlog=0 --innodb_buffer_pool_size=1G  --max_connections=2000
+    restart: always
+    healthcheck:
+      test: [ "CMD", "mysqladmin", "ping", "-h", "localhost" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ===============================
+  # Redis Cache (Data Node)
+  # ===============================
+  redis:
+    image: redis:7.0-alpine
+    container_name: ticket-redis
+    ports:
+      - "6379:6379" # Expose for App Nodes
+    # Performance tuning, no persistence
+    command: redis-server --appendonly no --save "" --maxmemory 1024mb --maxmemory-policy allkeys-lru --protected-mode no
+    restart: always
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  mysql_data:
+    driver: local

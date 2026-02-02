@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  # ===============================
+  # Backend (App Layer - Stateless)
+  # ===============================
+  backend:
+    build:
+      context: . # Changed from ./ticket to .
+      dockerfile: Dockerfile
+    container_name: ticket-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      # Point to Data Node Private IP
+      SPRING_DATASOURCE_URL: jdbc:mysql://${DB_HOST}:3306/ticket_db?useSSL=false&allowPublicKeyRetrieval=true
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_DATA_REDIS_HOST: ${REDIS_HOST}
+      SPRING_DATA_REDIS_PORT: 6379
+      JAVA_OPTS: "-Xmx1G -Xms512M -XX:+UseG1GC"
+    ports:
+      - "8081:8081"
+    restart: always
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8081/actuator/health" ]
+      interval: 10s
+      timeout: 5s
+      retries: 3

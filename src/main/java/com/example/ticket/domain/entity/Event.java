@@ -58,6 +58,9 @@ public class Event extends BaseEntity {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    @Version
+    private Long version;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default

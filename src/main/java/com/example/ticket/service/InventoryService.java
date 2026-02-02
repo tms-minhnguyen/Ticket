@@ -48,6 +48,9 @@ public class InventoryService {
      * @return true if tickets were successfully held, false if not enough inventory
      */
     public boolean holdTickets(Long eventId, int quantity) {
+        // Artificial delay for stress testing (Mock Payment Gateway latency)
+        simulateDelay();
+
         String key = getInventoryKey(eventId);
 
         // Atomic decrement
@@ -123,5 +126,17 @@ public class InventoryService {
 
     private String getHoldKey(String orderCode) {
         return HOLD_KEY_PREFIX + orderCode;
+    }
+
+    /**
+     * Artificial delay to simulate processing/latency.
+     */
+    private void simulateDelay() {
+        try {
+            // Delay 10-50ms
+            Thread.sleep(50);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 }
